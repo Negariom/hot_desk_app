@@ -1,16 +1,17 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from "axios"
 
-export interface AvailableDesk {
-  desk_id: number
+export interface DeskAvailability {
+  id: number
+  floor_id: number
   label: string
-  equipment: string
-  floor_level: number
-  building_name: string
-  city: string
+  status: string
+  equipment: string | null
+  x_coordinate: number | null
+  y_coordinate: number | null
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000"
-const ACCESS_TOKEN_KEY = "access_token"
+export const ACCESS_TOKEN_KEY = "access_token"
 
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -31,7 +32,7 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config
 })
 
-export async function getFloorDesks(floorId: number): Promise<AvailableDesk[]> {
-  const response = await apiClient.get<AvailableDesk[]>(`/desks/${floorId}/availability`)
+export async function getFloorDesks(floorId: number): Promise<DeskAvailability[]> {
+  const response = await apiClient.get<DeskAvailability[]>(`/desks/${floorId}/availability`)
   return response.data
 }
