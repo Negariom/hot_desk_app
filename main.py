@@ -1,17 +1,26 @@
+import os
+
 from fastapi import FastAPI
-from database import create_database_schema
+
+from auth import router as auth_router
 from routers import company
 from routers import desks
 from routers import reservation
 
-create_database_schema()
 
-app = FastAPI(title="Hot Desk API") 
+app = FastAPI(title="Hot Desk API")
 
+app.include_router(auth_router)
 app.include_router(company.router)
 app.include_router(desks.router)
 app.include_router(reservation.router)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+
+    uvicorn.run(
+        "main:app",
+        host=os.getenv("HOST", "0.0.0.0"),
+        port=int(os.getenv("PORT", "8000")),
+        reload=os.getenv("UVICORN_RELOAD", "true").lower() == "true",
+    )

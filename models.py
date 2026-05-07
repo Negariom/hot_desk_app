@@ -40,6 +40,9 @@ class Floor(Base):
     building_id = Column(Integer, ForeignKey("building.id", ondelete="CASCADE"))
     level = Column(Integer)
     name = Column(String(50))
+    svg_map = Column(String(255))
+    width = Column(Integer)
+    height = Column(Integer)
 
 class WorkGroupBuilding(Base):
     __tablename__ = "work_group_building"
@@ -63,6 +66,8 @@ class Desk(Base):
     label = Column(String(20))
     status = Column(String(20))
     equipment = Column(String(255))
+    x_coordinate = Column(Integer)
+    y_coordinate = Column(Integer)
 
 class Reservation(Base):
     __tablename__ = "reservation"
