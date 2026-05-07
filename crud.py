@@ -97,6 +97,24 @@ async def get_desks(session: AsyncSession) -> list[Desk]:
     return await _get_records(session, Desk)
 
 
+async def get_desks_by_floor(session: AsyncSession, floor_id: int) -> list[Desk]:
+    result = await session.execute(
+        select(Desk)
+        .where(Desk.floor_id == floor_id)
+        .order_by(Desk.label)
+    )
+    return list(result.scalars().all())
+
+
+async def get_reservations_for_employee(session: AsyncSession, employee_id: int) -> list[Reservation]:
+    result = await session.execute(
+        select(Reservation)
+        .where(Reservation.employee_id == employee_id)
+        .order_by(Reservation.start_time.desc(), Reservation.id.desc())
+    )
+    return list(result.scalars().all())
+
+
 async def create_reservation(session: AsyncSession, reservation_in: ReservationCreate) -> Reservation:
     start_time = _normalize_datetime(reservation_in.start_time)
     end_time = _normalize_datetime(reservation_in.end_time)

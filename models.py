@@ -1,5 +1,5 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, func
-from sqlalchemy.orm import declarative_base
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Table, func
+from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
@@ -58,16 +58,7 @@ class Employee(Base):
     workgroup_id = Column(Integer, ForeignKey("work_group.id", ondelete="SET NULL"))
     email = Column(String(50), unique=True)
     hash_password = Column(String(256))
-
-class Desk(Base):
-    __tablename__ = "desk"
-    id = Column(Integer, primary_key=True)
-    floor_id = Column(Integer, ForeignKey("floor.id", ondelete="CASCADE"))
-    label = Column(String(20))
-    status = Column(String(20))
-    equipment = Column(String(255))
-    x_coordinate = Column(Integer)
-    y_coordinate = Column(Integer)
+    
 
 class Reservation(Base):
     __tablename__ = "reservation"
@@ -78,3 +69,28 @@ class Reservation(Base):
     end_time = Column(DateTime)
     status = Column(String(20))
     created_at = Column(DateTime, server_default=func.now())
+
+desk_equipment = Table(
+    "desk_equipment",
+    Base.metadata,
+    Column("desk_id", Integer, ForeignKey("desk.id", ondelete="CASCADE"), primary_key=True),
+    Column("equipment_id", Integer, ForeignKey("equipment.id", ondelete="CASCADE"), primary_key=True)
+)
+
+class Equipment(Base):
+    __tablename__ = "equipment"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(50), unique=True)
+    
+    desks = relationship("Desk", secondary=desk_equipment, back_populates="equipments")
+
+class Desk(Base):
+    __tablename__ = "desk"
+    id = Column(Integer, primary_key=True)
+    floor_id = Column(Integer, ForeignKey("floor.id", ondelete="CASCADE"))
+    label = Column(String(20))
+    status = Column(String(20))
+    x_coordinate = Column(Integer)
+    y_coordinate = Column(Integer)
+    
+    equipments = relationship("Equipment", secondary=desk_equipment, back_populates="desks")
