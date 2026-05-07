@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from crud import (
+from services.crud import (
 	DeskMaintenanceError,
 	DeskNotFoundError,
 	EmployeeNotFoundError,

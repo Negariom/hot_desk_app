@@ -2,7 +2,7 @@ import os
 
 from fastapi import FastAPI
 
-from auth import router as auth_router
+from services.auth import router as auth_router
 from routers import company
 from routers import desks
 from routers import reservations

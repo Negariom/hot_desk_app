@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth import get_current_user
-from crud import (
+from services.auth import get_current_user
+from services.crud import (
     DeskMaintenanceError,
     DeskNotFoundError,
     EmployeeNotFoundError,
