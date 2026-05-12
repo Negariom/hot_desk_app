@@ -1,62 +1,156 @@
-# 🏢 Hot Desk Reservation System - Database Setup
+# Hot Desk App
 
-This project contains the complete database architecture for an office hot-desking system. The database environment is fully containerized using Docker, and the table structure and relationships are managed via Python scripts using SQLAlchemy Core (raw SQL, no ORM).
+Aplikacja do rezerwacji biurek w biurze. Projekt sklada sie z:
+- backendu w FastAPI
+- frontendu w React + Vite
+- bazy PostgreSQL uruchamianej przez Docker Compose
 
-## 🛠️ Prerequisites
+## Wymagania
+- Docker Desktop z Docker Compose
+- Python 3.14 lub inny zgodny Python 3.x
+- Node.js 20+
 
-Before you begin, ensure you have the following installed on your machine:
-* **Docker** and **Docker Compose**
-* **Python 3.x**
+## Struktura projektu
+- `backend/` - API, modele, migracja schematu i seed danych
+- `frontend/` - interfejs uzytkownika
 
----
+## 1. Uruchom baze danych
+Plik `docker-compose.yml` znajduje sie w katalogu `backend/`.
 
-## 🚀 Quick Start (Step-by-step guide)
+Z katalogu glownego projektu:
 
-# 1. Run the containers (Database + pgAdmin)
-The PostgreSQL database and pgAdmin management panel are configured and connected within an internal Docker network. To start them, open a terminal in the project's root directory and run:
+```powershell
+docker compose -f backend/docker-compose.yml up -d
+```
 
-```bash
+Albo wejd z katalogu backend:
+
+```powershell
+cd backend
 docker compose up -d
 ```
----
-# 2. Python Environment Setup
 
-The scripts that build the database require specific libraries. Run the following commands to create an isolated virtual environment and install the dependencies:
-```bash
+Po starcie dostajesz:
+- PostgreSQL: `localhost:5432`
+- pgAdmin: `http://localhost:5050`
 
-### 1. Create a virtual environment
-python3 -m venv .venv
+Dane logowania do PostgreSQL i pgAdmin ustawiasz w pliku `backend/.env`.
 
-### 2. Activate the environment (for Linux/macOS)
-source .venv/bin/activate
+## 2. Skonfiguruj backend
+Wejdz do katalogu backend i przygotuj virtualenv:
 
-### 3. Install the required packages
+```powershell
+cd backend
+copy .env.example .env
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
----
-# 3. Environment Variables Setup
+Jesli uzywasz CMD, zamiast PowerShell aktywuj srodowisko tak:
 
-The project uses a `.env` file to manage database connections. We provide an example file to help you get started quickly.
-
-1. Copy the example file to create your local environment file:
-```bash
-cp .env.example .env
+```bat
+.\.venv\Scripts\activate.bat
 ```
-2. Open the `.env` file and make sure the parameters match your Docker database settings.
 
----
-# 4. Initialize the Database Structure (Schema)
+### Wazne zmienne backendu
+W pliku `backend/.env` sprawdz przede wszystkim:
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `POSTGRES_HOST`
+- `POSTGRES_PORT`
+- `POSTGRES_DB`
+- `SECRET_KEY`
+- `CORS_ORIGINS` - opcjonalnie, jesli frontend dziala z innego adresu niz domyslny
 
-Once the containers are running, your `.env` is set, and your Python environment is active, execute the main script to initialize the database structure:
-```bash
+Domyslnie backend akceptuje frontend z:
+- `http://localhost:5173`
+- `http://127.0.0.1:5173`
+
+## 3. Utworz schemat bazy
+Po uruchomieniu bazy i ustawieniu `.env` wygeneruj tabele:
+
+```powershell
 python database.py
 ```
 
-# 5. Run the FastAPI Server
+Jesli chcesz zasilic baze danymi testowymi, uruchom dodatkowo:
 
-To start the API application, run the development server using uvicorn:
-```bash
-uvicorn main:app --reload 
+```powershell
+python fakedatagenerator.py
 ```
-You can access the interactive documentation (Swagger) at: http://127.0.0.1:8000/docs
+
+## 4. Uruchom backend
+Najprostszy sposob to uruchomienie uvicorn z katalogu backend:
+
+```powershell
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Alternatywnie mozesz uruchomic bezposrednio plik:
+
+```powershell
+python main.py
+```
+
+Backend bedzie dostepny pod:
+- `http://localhost:8000`
+- dokumentacja Swagger: `http://localhost:8000/docs`
+
+## 5. Uruchom frontend
+Wejdz do katalogu frontend i zainstaluj zaleznosci:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend uruchomi sie domyslnie na:
+- `http://localhost:5173`
+
+### Opcjonalna konfiguracja frontendu
+Frontend domyslnie laczy sie z backendem pod `http://localhost:8000`.
+Jesli backend dziala pod innym adresem, dodaj plik `frontend/.env` z trescia:
+
+```env
+VITE_API_URL=http://localhost:8000
+```
+
+## 6. Najczestsze komendy
+### Backend
+```powershell
+cd backend
+python database.py
+python fakedatagenerator.py
+uvicorn main:app --reload
+```
+
+### Frontend
+```powershell
+cd frontend
+npm install
+npm run dev
+npm run build
+npm run preview
+```
+
+## 7. Najczestsze problemy
+- Jesli `npm start dev` nie dziala, uzyj `npm run dev`.
+- Jesli frontend pokazuje blad CORS, upewnij sie, ze backend dziala i `CORS_ORIGINS` zawiera `http://localhost:5173`.
+- Jesli backend nie laczy sie z baza, sprawdz `backend/.env` i czy kontenery sa uruchomione przez Docker Compose.
+- Jesli port `8000` lub `5173` jest zajety, zmien port w komendzie startowej.
+
+## 8. Zatrzymanie aplikacji
+- Backend zatrzymasz przez `Ctrl+C` w terminalu.
+- Kontenery bazy zatrzymasz poleceniem:
+
+```powershell
+docker compose -f backend/docker-compose.yml down
+```
+
+Jesli chcesz usunac tez wolumen z danymi, uzyj:
+
+```powershell
+docker compose -f backend/docker-compose.yml down -v
+```
