@@ -52,7 +52,7 @@ class Desk(Base):
 
     floor = relationship("Floor", back_populates="desks")
     reservations = relationship("Reservation", back_populates="desk")
-    features = relationship("DeskFeature", back_populates="desk")
+    features = relationship("DeskFeature", back_populates="desk", lazy="selectin")
 
 
 class Feature(Base):
@@ -73,7 +73,7 @@ class DeskFeature(Base):
     value = Column(String)
 
     desk = relationship("Desk", back_populates="features")
-    feature = relationship("Feature", back_populates="desks")
+    feature = relationship("Feature", back_populates="desks", lazy="selectin")
 
 
 class User(Base):

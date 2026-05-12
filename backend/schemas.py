@@ -87,11 +87,8 @@ class DeskCreate(DeskBase):
 
 class Desk(DeskBase):
     id: int
-    model_config = ConfigDict(from_attributes=True)
-
-
-class DeskWithFeatures(Desk):
     features: List[DeskFeature] = []
+    model_config = ConfigDict(from_attributes=True)
 
 
 # User Schemas
