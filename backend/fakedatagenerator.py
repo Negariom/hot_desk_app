@@ -1,180 +1,171 @@
 import asyncio
 import random
-import time
-from datetime import datetime, timedelta
+from datetime import date, timedelta
 
 from faker import Faker
-from sqlalchemy import insert, select, text
+from sqlalchemy import insert, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.auth import get_password_hash
-from database import AsyncSessionLocal
-from models import Building, Company, Desk, Employee, Floor, Location, Reservation
+# Adjust the imports to be absolute
+import models
+from database import async_engine, AsyncSessionLocal
 
-fake = Faker("en_US")
+# A simple password hashing function for the fake data
+def get_password_hash(password: str) -> str:
+    # In a real app, use a proper hashing library like passlib
+    return f"hashed_{password}"
 
-# --- ZALECENIA PROWADZĄCEGO ---
-CITIES_COUNT = 100
-BUILDINGS_TOTAL = 100  # 1 budynek na miasto
-FLOORS_PER_BUILDING = 10
-DESKS_PER_FLOOR = 100
+fake = Faker("pl_PL")
 
-# Parametry rezerwacji
-DAYS_OF_OPERATION = 300
-RESERVATIONS_PER_DESK = 3  # 100,000 biurek * 3 = 300,000 rezerwacji
+# Configuration
+CITIES_TO_CREATE = ["Wrocław", "Warszawa", "Kraków"]
+BUILDINGS_PER_CITY_RANGE = (2, 5)
+FLOORS_PER_BUILDING_RANGE = (3, 8)
+DESKS_PER_FLOOR_RANGE = (10, 20)
+FEATURES_TO_CREATE = [
+    {"name": "Monitor", "category": "Hardware"},
+    {"name": "Fotel ergonomiczny", "category": "Ergonomia"},
+    {"name": "Stacja dokująca", "category": "Hardware"},
+    {"name": "Biurko z regulacją wysokości", "category": "Ergonomia"},
+    {"name": "Klawiatura mechaniczna", "category": "Hardware"},
+    {"name": "Myszka bezprzewodowa", "category": "Hardware"},
+    {"name": "Podkładka pod nadgarstki", "category": "Ergonomia"},
+]
+TEST_USER_EMAIL = "test@example.com"
+TEST_USER_PASSWORD = "password"
 
-BATCH_SIZE = 100000
 
-DESK_STATUSES = ("available", "occupied", "maintenance")
-DESK_EQUIPMENT = (
-    "monitor, ergonomic chair",
-    "monitor, ergonomic chair, docking station",
-    "dual monitor, ergonomic chair",
-    "monitor, standing desk",
-)
+async def recreate_schema():
+    """Drops all tables with CASCADE and creates them again."""
+    print("Recreating database schema...")
+    async with async_engine.begin() as conn:
+        for table in reversed(models.Base.metadata.sorted_tables):
+            await conn.execute(text(f'DROP TABLE IF EXISTS "{table.name}" CASCADE;'))
+    
+    async with async_engine.begin() as conn:
+        await conn.run_sync(models.Base.metadata.create_all)
+    print("Schema recreated successfully.")
 
-TEST_EMPLOYEE_PASSWORD = "password123"
 
-async def bulk_insert_ids(session: AsyncSession, table, rows):
-    if not rows:
-        return []
-    statement = insert(table).returning(table.id)
-    result = await session.execute(statement, rows)
-    return result.scalars().all()
+async def seed_data():
+    """Seeds the database with fake data."""
+    start_time = asyncio.get_event_loop().time()
 
-async def flush_batch(session: AsyncSession, table, batch, inserted_count, total_count, entity_name):
-    if not batch:
-        return inserted_count
-
-    await session.execute(insert(table), batch)
-    await session.commit()
-
-    inserted_count += len(batch)
-    print(f"Inserted {inserted_count} / {total_count} {entity_name}...")
-    batch.clear()
-    return inserted_count
-
-async def clear_seed_data(session: AsyncSession):
-    await session.execute(
-        text(
-            "TRUNCATE TABLE reservation, desk, floor, work_group_building, work_group, employee, building, location, user_group, company RESTART IDENTITY CASCADE"
-        )
-    )
-    await session.commit()
-
-async def seed_database():
-    start_time = time.time()
+    await recreate_schema()
 
     async with AsyncSessionLocal() as session:
-        print("Clearing previously generated data...")
-        await clear_seed_data(session)
-
-        # Generujemy jedną główną firmę dla uproszczenia (lub więcej, jeśli wolisz)
-        print("Generating company...")
-        company_id = (await bulk_insert_ids(session, Company, [{"name": "Global Corp", "group_name": "Group 01"}]))[0]
+        # 1. Create Cities
+        print("Creating cities...")
+        city_rows = [{"name": name} for name in CITIES_TO_CREATE]
+        city_ids = (await session.execute(insert(models.City).returning(models.City.id), city_rows)).scalars().all()
         await session.commit()
+        print(f"-> Created {len(city_ids)} cities.")
 
-        print(f"Generating {CITIES_COUNT} cities (locations)...")
-        locations_data = [
-            {
-                "country": fake.country()[:50],
-                "city": fake.city()[:100],
-            }
-            for _ in range(CITIES_COUNT)
-        ]
-        location_ids = await bulk_insert_ids(session, Location, locations_data)
-
-        print(f"Generating {BUILDINGS_TOTAL} buildings (1 per city)...")
-        buildings_data = [
-            {
-                "name": f"Bldg {i+1:03d} - {fake.company_suffix()}",
-                "address": fake.street_address()[:100],
-                "location_id": location_ids[i], # Poprawiona literówka z Twojego kodu (location_100id -> location_id)
-                "company_id": company_id,
-            }
-            for i in range(BUILDINGS_TOTAL)
-        ]
-        building_ids = await bulk_insert_ids(session, Building, buildings_data)
+        # 2. Create Buildings
+        print("Creating buildings...")
+        building_rows = []
+        for city_id in city_ids:
+            for _ in range(random.randint(*BUILDINGS_PER_CITY_RANGE)):
+                building_rows.append({
+                    "name": f"Biurowiec {fake.company_suffix()}",
+                    "address": fake.street_address(),
+                    "city_id": city_id,
+                })
+        building_ids = (await session.execute(insert(models.Building).returning(models.Building.id), building_rows)).scalars().all()
         await session.commit()
+        print(f"-> Created {len(building_ids)} buildings.")
 
-        total_floors = BUILDINGS_TOTAL * FLOORS_PER_BUILDING
-        print(f"Generating {total_floors} floors...")
-        floors_data = []
+        # 3. Create Floors
+        print("Creating floors...")
+        floor_rows = []
         for building_id in building_ids:
-            for level in range(1, FLOORS_PER_BUILDING + 1):
-                floors_data.append({
+            for i in range(random.randint(*FLOORS_PER_BUILDING_RANGE)):
+                floor_rows.append({
+                    "floor_number": i,
                     "building_id": building_id,
-                    "level": level,
-                    "name": f"Floor {level}",
+                    "description": f"Piętro {i}",
                 })
-        floor_ids = await bulk_insert_ids(session, Floor, floors_data)
+        floor_ids = (await session.execute(insert(models.Floor).returning(models.Floor.id), floor_rows)).scalars().all()
         await session.commit()
+        print(f"-> Created {len(floor_ids)} floors.")
 
-        total_desks = total_floors * DESKS_PER_FLOOR
-        print(f"Generating {total_desks} desks (this might take a while)...")
-        desks_batch = []
-        desks_inserted = 0
-
-        for floor_index, floor_id in enumerate(floor_ids, start=1):
-            floor_level = ((floor_index - 1) % FLOORS_PER_BUILDING) + 1
-            for desk_number in range(1, DESKS_PER_FLOOR + 1):
-                desks_batch.append({
+        # 4. Create Desks
+        print("Creating desks...")
+        desk_rows = []
+        for floor_id in floor_ids:
+            for i in range(random.randint(*DESKS_PER_FLOOR_RANGE)):
+                desk_rows.append({
+                    "name": f"Biurko {i + 1:02d}",
                     "floor_id": floor_id,
-                    "label": f"F{floor_level:02d}-D{desk_number:03d}",
-                    "status": DESK_STATUSES[(desk_number + floor_level) % len(DESK_STATUSES)],
-                    "equipment": DESK_EQUIPMENT[(desk_number + floor_index) % len(DESK_EQUIPMENT)],
+                    "is_active": random.choice([True, False]), # Randomize active status
+                    "x_pos": round(random.uniform(10, 90), 2),
+                    "y_pos": round(random.uniform(10, 90), 2),
                 })
-
-                if len(desks_batch) >= BATCH_SIZE:
-                    desks_inserted = await flush_batch(session, Desk, desks_batch, desks_inserted, total_desks, "desks")
-
-        desks_inserted = await flush_batch(session, Desk, desks_batch, desks_inserted, total_desks, "desks")
-
-        
-        print("Generating test employee...")
-        employee_id = (await bulk_insert_ids(session, Employee, [{
-            "first_name": "Test",
-            "last_name": "User",
-            "email": "test@example.com",
-            "hash_password": get_password_hash(TEST_EMPLOYEE_PASSWORD),
-        }]))[0]
+        desk_ids = (await session.execute(insert(models.Desk).returning(models.Desk.id), desk_rows)).scalars().all()
         await session.commit()
+        print(f"-> Created {len(desk_ids)} desks.")
 
-        # --- GENEROWANIE 300 000 REZERWACJI ---
-        total_reservations = total_desks * RESERVATIONS_PER_DESK
-        print(f"Generating {total_reservations} reservations for a 300-day period...")
-        
-        # Pobieramy ID wygenerowanych biurek (będą potrzebne do stworzenia relacji)
-        all_desk_ids = (await session.execute(select(Desk.id))).scalars().all()
-        
-        base_date = datetime.now()
-        reservations_batch = []
-        reservations_inserted = 0
+        # 5. Create Features
+        print("Creating features...")
+        feature_ids = (await session.execute(insert(models.Feature).returning(models.Feature.id), FEATURES_TO_CREATE)).scalars().all()
+        await session.commit()
+        print(f"-> Created {len(feature_ids)} features.")
 
-        for desk_id in all_desk_ids:
-            # Losujemy 3 UNIKALNE dni z przedziału ostatnich 300 dni
-            random_days_offsets = random.sample(range(DAYS_OF_OPERATION), RESERVATIONS_PER_DESK)
-            
-            for offset in random_days_offsets:
-                reservation_start = base_date - timedelta(days=offset)
-                reservation_end = reservation_start + timedelta(hours=8)
+        # 6. Assign Features to Desks
+        print("Assigning features to desks...")
+        desk_feature_rows = []
+        all_features = await session.execute(text("SELECT id, name FROM feature"))
+        feature_map = {f.id: f.name for f in all_features.all()}
+
+        for desk_id in desk_ids:
+            selected_feature_ids = random.sample(feature_ids, k=random.randint(1, len(feature_ids)))
+            for feature_id in selected_feature_ids:
+                value = None
+                feature_name = feature_map.get(feature_id)
+
+                if feature_name == "Monitor":
+                    value = random.choice(["24-calowy Dell", "27-calowy HP", "32-calowy Samsung 4K", "2x 24-calowy Dell"])
+                elif feature_name == "Stacja dokująca":
+                    value = random.choice(["Dell WD19S", "HP Thunderbolt G4", "Lenovo ThinkPad Universal"])
+                elif feature_name == "Fotel ergonomiczny":
+                    value = random.choice(["Ergohuman", "Herman Miller Aeron", "Markus IKEA"])
+                elif feature_name == "Biurko z regulacją wysokości":
+                    value = random.choice(["Elektryczne", "Manualne"])
                 
-                # Dostosuj nazwy kolumn poniżej do swojego modelu `Reservation`
-                reservations_batch.append({
-                    "desk_id": desk_id,
-                    "start_time": reservation_start,
-                    "end_time": reservation_end,
-                    "employee_id": employee_id,
-                    "status": "reserved"
-                })
+                desk_feature_rows.append({"desk_id": desk_id, "feature_id": feature_id, "value": value})
+        await session.execute(insert(models.DeskFeature), desk_feature_rows)
+        await session.commit()
+        print(f"-> Assigned {len(desk_feature_rows)} features.")
 
-            if len(reservations_batch) >= BATCH_SIZE:
-                reservations_inserted = await flush_batch(session, Reservation, reservations_batch, reservations_inserted, total_reservations, "reservations")
+        # 7. Create Test User
+        print("Creating test user...")
+        user_row = {
+            "email": TEST_USER_EMAIL,
+            "password_hash": get_password_hash(TEST_USER_PASSWORD),
+            "name": "Test",
+            "surname": "User",
+            "role": "user",
+        }
+        user_id = (await session.execute(insert(models.User).returning(models.User.id), [user_row])).scalar_one()
+        await session.commit()
+        print(f"-> Created user '{TEST_USER_EMAIL}' with password '{TEST_USER_PASSWORD}'.")
 
-        reservations_inserted = await flush_batch(session, Reservation, reservations_batch, reservations_inserted, total_reservations, "reservations")
+        # 8. Create Reservations
+        print("Creating reservations...")
+        reservation_rows = []
+        for _ in range(10):  # Create 10 random reservations
+            reservation_rows.append({
+                "reservation_date": date.today() + timedelta(days=random.randint(1, 14)),
+                "user_id": user_id,
+                "desk_id": random.choice(desk_ids),
+            })
+        await session.execute(insert(models.Reservation), reservation_rows)
+        await session.commit()
+        print(f"-> Created {len(reservation_rows)} reservations.")
 
-        end_time = time.time()
-        print(f"\nFinished successfully! Duration: {round(end_time - start_time, 2)} seconds.")
+        end_time = asyncio.get_event_loop().time()
+        print(f"\nDatabase seeding finished in {end_time - start_time:.2f} seconds.")
+
 
 if __name__ == "__main__":
-    asyncio.run(seed_database())
+    asyncio.run(seed_data())

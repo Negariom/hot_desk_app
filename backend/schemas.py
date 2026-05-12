@@ -1,205 +1,132 @@
-from datetime import datetime
-from typing import Optional
-
 from pydantic import BaseModel, ConfigDict
+from typing import List, Optional
+from datetime import date, datetime
 
 
-class CompanyBase(BaseModel):
-    name: str
-    group_name: Optional[str] = None
-
-
-class CompanyCreate(CompanyBase):
-    pass
-
-
-class CompanyUpdate(BaseModel):
-    name: Optional[str] = None
-    group_name: Optional[str] = None
-
-
-class CompanyOut(CompanyBase):
-    id: int
-    model_config = ConfigDict(from_attributes=True)
-
-
-CompanyRead = CompanyOut
-Company = CompanyOut
-
-
-class LocationBase(BaseModel):
-    country: str
-    city: str
-
-
-class LocationCreate(LocationBase):
-    pass
-
-
-class LocationOut(LocationBase):
-    id: int
-    model_config = ConfigDict(from_attributes=True)
-
-
-LocationRead = LocationOut
-
-
-class UserGroupBase(BaseModel):
+# City Schemas
+class CityBase(BaseModel):
     name: str
 
 
-class UserGroupCreate(UserGroupBase):
+class CityCreate(CityBase):
     pass
 
 
-class UserGroupOut(UserGroupBase):
+class City(CityBase):
     id: int
     model_config = ConfigDict(from_attributes=True)
 
 
-UserGroupRead = UserGroupOut
-
-
+# Building Schemas
 class BuildingBase(BaseModel):
-    location_id: int
     name: str
     address: str
-    company_id: int
+    city_id: int
 
 
 class BuildingCreate(BuildingBase):
     pass
 
 
-class BuildingOut(BuildingBase):
+class Building(BuildingBase):
     id: int
     model_config = ConfigDict(from_attributes=True)
 
 
-BuildingRead = BuildingOut
-
-
-class WorkGroupBase(BaseModel):
-    name: str
-    company_id: int
-
-
-class WorkGroupCreate(WorkGroupBase):
-    pass
-
-
-class WorkGroupOut(WorkGroupBase):
-    id: int
-    model_config = ConfigDict(from_attributes=True)
-
-
-WorkGroupRead = WorkGroupOut
-
-
+# Floor Schemas
 class FloorBase(BaseModel):
+    floor_number: int
     building_id: int
-    level: int
-    name: str
-    svg_map: Optional[str] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
+    description: Optional[str] = None
+    svg_map_url: Optional[str] = None
 
 
 class FloorCreate(FloorBase):
     pass
 
 
-class FloorOut(FloorBase):
+class Floor(FloorBase):
     id: int
     model_config = ConfigDict(from_attributes=True)
 
 
-FloorRead = FloorOut
+# Feature Schemas
+class FeatureBase(BaseModel):
+    name: str
+    category: Optional[str] = None
 
 
-class WorkGroupBuildingBase(BaseModel):
-    workgroup_id: int
-    building_id: int
-
-
-class WorkGroupBuildingCreate(WorkGroupBuildingBase):
-    pass
-
-
-class WorkGroupBuildingOut(WorkGroupBuildingBase):
-    model_config = ConfigDict(from_attributes=True)
-
-
-WorkGroupBuildingRead = WorkGroupBuildingOut
-
-
-class EmployeeBase(BaseModel):
-    first_name: str
-    last_name: str
-    user_group_id: Optional[int] = None
-    workgroup_id: Optional[int] = None
-    email: str
-
-
-class EmployeeCreate(EmployeeBase):
-    hash_password: str
-
-
-class EmployeeOut(EmployeeBase):
+class Feature(FeatureBase):
     id: int
     model_config = ConfigDict(from_attributes=True)
 
 
-EmployeeRead = EmployeeOut
+# DeskFeature Schemas
+class DeskFeatureBase(BaseModel):
+    value: Optional[str] = None
+    feature: Feature
 
 
+class DeskFeature(DeskFeatureBase):
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Desk Schemas
 class DeskBase(BaseModel):
+    name: str
     floor_id: int
-    label: str
-    status: str
-    equipment: Optional[str] = None
-    x_coordinate: Optional[int] = None
-    y_coordinate: Optional[int] = None
+    description: Optional[str] = None
+    x_pos: Optional[float] = None
+    y_pos: Optional[float] = None
+    is_active: bool = True
 
 
 class DeskCreate(DeskBase):
     pass
 
 
-class DeskOut(DeskBase):
+class Desk(DeskBase):
     id: int
     model_config = ConfigDict(from_attributes=True)
 
 
-DeskRead = DeskOut
+class DeskWithFeatures(Desk):
+    features: List[DeskFeature] = []
 
 
+# User Schemas
+class UserBase(BaseModel):
+    email: str
+    name: Optional[str] = None
+    surname: Optional[str] = None
+    role: str = "user"
+
+
+class UserCreate(UserBase):
+    password: str
+
+
+class User(UserBase):
+    id: int
+    created_at: datetime
+    last_login: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Reservation Schemas
 class ReservationBase(BaseModel):
+    reservation_date: date
     desk_id: int
-    employee_id: int
-    start_time: datetime
-    end_time: datetime
-    status: str = "reserved"
 
 
 class ReservationCreate(ReservationBase):
     pass
 
 
-class ReservationOut(ReservationBase):
+class Reservation(ReservationBase):
     id: int
-    created_at: Optional[datetime] = None
+    user_id: int
+    status: str
+    check_in: bool
+    created_at: datetime
     model_config = ConfigDict(from_attributes=True)
-
-
-ReservationRead = ReservationOut
-Reservation = ReservationOut
-
-
-class AvailableDesk(BaseModel):
-    desk_id: int
-    label: str
-    equipment: str
-    floor_level: int
-    building_name: str
-    city: str

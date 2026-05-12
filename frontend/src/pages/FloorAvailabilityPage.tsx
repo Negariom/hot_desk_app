@@ -1,173 +1,175 @@
-import { type FormEvent, useState } from 'react'
+import { useState, useEffect } from 'react';
+import { apiClient } from '../api/client';
 
-import { useFloorDesks } from '../hooks/useFloorDesks'
-
-function getStatusClass(status: string) {
-  switch (status.toLowerCase()) {
-    case 'available':
-      return 'status-pill--available'
-    case 'occupied':
-      return 'status-pill--occupied'
-    case 'maintenance':
-      return 'status-pill--maintenance'
-    default:
-      return 'status-pill--default'
-  }
-}
+// Interfaces
+interface City { id: number; name: string; }
+interface Building { id: number; name: string; city_id: number; }
+interface Floor { id: number; floor_number: number; building_id: number; }
+interface Desk { id: number; name: string; floor_id: number; is_active: boolean; }
 
 export function FloorAvailabilityPage() {
-  const [draftFloorId, setDraftFloorId] = useState('1')
-  const [floorId, setFloorId] = useState(1)
+  const [cities, setCities] = useState<City[]>([]);
+  const [buildings, setBuildings] = useState<Building[]>([]);
+  const [floors, setFloors] = useState<Floor[]>([]);
+  const [desks, setDesks] = useState<Desk[]>([]);
 
-  const desksQuery = useFloorDesks(floorId)
-  const desks = desksQuery.data ?? []
+  const [selectedCity, setSelectedCity] = useState<number | null>(null);
+  const [selectedBuilding, setSelectedBuilding] = useState<number | null>(null);
+  const [selectedFloor, setSelectedFloor] = useState<number | null>(null);
 
-  const totalDesks = desks.length
-  const availableDesks = desks.filter((desk) => desk.status.toLowerCase() === 'available').length
-  const occupiedDesks = desks.filter((desk) => desk.status.toLowerCase() === 'occupied').length
-  const maintenanceDesks = desks.filter((desk) => desk.status.toLowerCase() === 'maintenance').length
+  const [isLoading, setIsLoading] = useState({
+    cities: true,
+    buildings: false,
+    floors: false,
+    desks: false,
+  });
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  // Fetch cities
+  useEffect(() => {
+    setIsLoading(prev => ({ ...prev, cities: true }));
+    apiClient.get('/cities')
+      .then(response => setCities(response.data))
+      .catch(error => console.error("Failed to fetch cities", error))
+      .finally(() => setIsLoading(prev => ({ ...prev, cities: false })));
+  }, []);
 
-    const parsedFloorId = Number.parseInt(draftFloorId, 10)
-
-    if (!Number.isFinite(parsedFloorId) || parsedFloorId < 1) {
-      setDraftFloorId(String(Math.max(1, floorId)))
-      return
+  // Fetch buildings
+  useEffect(() => {
+    // Reset child states
+    setBuildings([]);
+    setFloors([]);
+    setDesks([]);
+    if (selectedCity) {
+      setIsLoading(prev => ({ ...prev, buildings: true }));
+      apiClient.get(`/buildings/?city_id=${selectedCity}`)
+        .then(response => setBuildings(response.data))
+        .catch(error => console.error("Failed to fetch buildings", error))
+        .finally(() => setIsLoading(prev => ({ ...prev, buildings: false })));
     }
+  }, [selectedCity]);
 
-    if (parsedFloorId === floorId) {
-      void desksQuery.refetch()
-      return
+  // Fetch floors
+  useEffect(() => {
+    // Reset child states
+    setFloors([]);
+    setDesks([]);
+    if (selectedBuilding) {
+      setIsLoading(prev => ({ ...prev, floors: true }));
+      apiClient.get(`/floors/?building_id=${selectedBuilding}`)
+        .then(response => setFloors(response.data))
+        .catch(error => console.error("Failed to fetch floors", error))
+        .finally(() => setIsLoading(prev => ({ ...prev, floors: false })));
     }
+  }, [selectedBuilding]);
 
-    setFloorId(parsedFloorId)
-  }
-
-  const isRefreshing = desksQuery.isFetching && !desksQuery.isPending
+  // Fetch desks
+  useEffect(() => {
+    // Reset child state
+    setDesks([]);
+    if (selectedFloor) {
+      setIsLoading(prev => ({ ...prev, desks: true }));
+      apiClient.get(`/desks/?floor_id=${selectedFloor}`)
+        .then(response => setDesks(response.data))
+        .catch(error => console.error("Failed to fetch desks", error))
+        .finally(() => setIsLoading(prev => ({ ...prev, desks: false })));
+    }
+  }, [selectedFloor]);
 
   return (
     <main className="app-shell">
       <section className="page">
         <header className="hero-card">
           <div className="hero-copy">
-            <p className="eyebrow">Hot desk reservation</p>
-            <h1 className="title">Biurka na piętrze {floorId}</h1>
-            <p className="lede">
-              Widok startowy oparty na React Query. Zmień numer piętra, aby pobrać aktualną listę
-              biurek z backendu FastAPI.
-            </p>
-          </div>
-
-          <div className="hero-metrics" aria-label="Podsumowanie piętra">
-            <article className="metric">
-              <span className="metric__label">Łącznie</span>
-              <strong className="metric__value">{totalDesks}</strong>
-              <span className="metric__hint">wszystkie biurka w odpowiedzi API</span>
-            </article>
-            <article className="metric">
-              <span className="metric__label">Dostępne</span>
-              <strong className="metric__value">{availableDesks}</strong>
-              <span className="metric__hint">status `available`</span>
-            </article>
-            <article className="metric">
-              <span className="metric__label">Serwis</span>
-              <strong className="metric__value">{maintenanceDesks}</strong>
-              <span className="metric__hint">status `maintenance`</span>
-            </article>
+            <h1 className="title">Rezerwacja biurek</h1>
+            <p className="lede">Wybierz miasto, budynek i piętro, aby zobaczyć dostępne biurka.</p>
           </div>
         </header>
 
-        <section className="panel">
-          <form className="search-form" onSubmit={handleSubmit}>
-            <label className="field">
-              <span className="field__label">Numer piętra</span>
-              <input
-                className="field__input"
-                min={1}
-                step={1}
-                type="number"
-                value={draftFloorId}
-                onChange={(event) => setDraftFloorId(event.target.value)}
-                placeholder="np. 3"
-              />
-            </label>
-
-            <button className="button" type="submit" disabled={desksQuery.isPending}>
-              {isRefreshing ? 'Odświeżanie...' : 'Pobierz biurka'}
-            </button>
-          </form>
-
-          <div className="summary-grid">
-            <article className="summary-card">
-              <span className="summary-card__label">Aktualne piętro</span>
-              <strong className="summary-card__value">{floorId}</strong>
-              <span className="summary-card__meta">To zapytanie używa klucza React Query dla tego piętra.</span>
-            </article>
-            <article className="summary-card">
-              <span className="summary-card__label">Zajęte</span>
-              <strong className="summary-card__value">{occupiedDesks}</strong>
-              <span className="summary-card__meta">Biurka oznaczone jako `occupied`.</span>
-            </article>
-            <article className="summary-card">
-              <span className="summary-card__label">Status zapytania</span>
-              <strong className="summary-card__value">
-                {desksQuery.isPending ? 'Ładowanie' : isRefreshing ? 'Odświeżanie' : 'Gotowe'}
-              </strong>
-              <span className="summary-card__meta">Dane są pobierane przez axios z lokalnego backendu.</span>
-            </article>
+        <div className="selection-container">
+          {/* City Selection */}
+          <div className="selection-step">
+            <h2>1. Wybierz miasto</h2>
+            {isLoading.cities ? <p>Ładowanie...</p> : (
+              <ul className="item-list">
+                {cities.map((city) => (
+                  <li key={city.id} className={`item-card ${selectedCity === city.id ? 'selected' : ''}`}
+                    onClick={() => {
+                      setSelectedCity(city.id);
+                      setSelectedBuilding(null);
+                      setSelectedFloor(null);
+                    }}>
+                    {city.name}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
-          {desksQuery.isError ? (
-            <div className="state-card state-card--error">
-              <strong>Nie udało się pobrać listy biurek.</strong>
-              <p>{desksQuery.error instanceof Error ? desksQuery.error.message : 'Spróbuj ponownie.'}</p>
-            </div>
-          ) : desksQuery.isPending ? (
-            <div className="state-card">
-              <strong>Ładowanie danych...</strong>
-              <p>Pobieram biurka dla piętra {floorId}.</p>
-            </div>
-          ) : desks.length === 0 ? (
-            <div className="state-card state-card--empty">
-              <strong>Brak biurek dla tego piętra.</strong>
-              <p>Backend zwrócił pustą listę.</p>
-            </div>
-          ) : (
-            <div className="results-grid">
-              {desks.map((desk) => (
-                <article className="desk-card" key={desk.id}>
-                  <div className="desk-card__header">
-                    <div>
-                      <p className="desk-label">{desk.label}</p>
-                      <p className="desk-subtitle">Biurko ID {desk.id}</p>
-                    </div>
-                    <span className={`status-pill ${getStatusClass(desk.status)}`}>{desk.status}</span>
-                  </div>
-
-                  <dl className="desk-specs">
-                    <div className="spec">
-                      <dt>Wyposażenie</dt>
-                      <dd>{desk.equipment ?? 'Brak danych'}</dd>
-                    </div>
-                    <div className="spec">
-                      <dt>Współrzędne</dt>
-                      <dd>
-                        {desk.x_coordinate ?? '—'}, {desk.y_coordinate ?? '—'}
-                      </dd>
-                    </div>
-                    <div className="spec">
-                      <dt>Piętro</dt>
-                      <dd>{desk.floor_id}</dd>
-                    </div>
-                  </dl>
-                </article>
-              ))}
+          {/* Building Selection */}
+          {selectedCity && (
+            <div className="selection-step">
+              <h2>2. Wybierz budynek</h2>
+              {isLoading.buildings ? <p>Ładowanie...</p> : (
+                <ul className="item-list">
+                  {buildings.map((building) => (
+                    <li key={building.id} className={`item-card ${selectedBuilding === building.id ? 'selected' : ''}`}
+                      onClick={() => {
+                        setSelectedBuilding(building.id);
+                        setSelectedFloor(null);
+                      }}>
+                      {building.name}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
-        </section>
+
+          {/* Floor Selection */}
+          {selectedBuilding && (
+            <div className="selection-step">
+              <h2>3. Wybierz piętro</h2>
+              {isLoading.floors ? <p>Ładowanie...</p> : (
+                <ul className="item-list">
+                  {floors.map((floor) => (
+                    <li key={floor.id} className={`item-card ${selectedFloor === floor.id ? 'selected' : ''}`}
+                      onClick={() => setSelectedFloor(floor.id)}>
+                      Piętro {floor.floor_number}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Desk List */}
+        {selectedFloor && (
+          <section className="panel">
+            <h3>Biurka na piętrze</h3>
+            {isLoading.desks ? <p>Ładowanie biurek...</p> : (
+              <div className="results-grid">
+                {desks.length > 0 ? (
+                  desks.map((desk) => (
+                    <article className="desk-card" key={desk.id}>
+                      <div className="desk-card__header">
+                        <p className="desk-label">{desk.name}</p>
+                        <span className={`status-pill ${desk.is_active ? 'status-pill--available' : 'status-pill--occupied'}`}>
+                          {desk.is_active ? 'Dostępne' : 'Zajęte'}
+                        </span>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="state-card state-card--empty">
+                    <strong>Brak biurek na tym piętrze.</strong>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        )}
       </section>
     </main>
-  )
+  );
 }
