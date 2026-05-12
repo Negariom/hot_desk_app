@@ -6,6 +6,8 @@ interface City { id: number; name: string; }
 interface Building { id: number; name: string; city_id: number; }
 interface Floor { id: number; floor_number: number; building_id: number; }
 interface Desk { id: number; name: string; floor_id: number; is_active: boolean; }
+interface Feature { id: number; name: string; category?: string; }
+interface DeskFeature { value: string | null; feature: Feature; }
 
 export function FloorAvailabilityPage() {
   const [cities, setCities] = useState<City[]>([]);
@@ -16,17 +18,20 @@ export function FloorAvailabilityPage() {
   const [selectedCity, setSelectedCity] = useState<number | null>(null);
   const [selectedBuilding, setSelectedBuilding] = useState<number | null>(null);
   const [selectedFloor, setSelectedFloor] = useState<number | null>(null);
+  
+  const [expandedDeskId, setExpandedDeskId] = useState<number | null>(null);
+  const [deskEquipment, setDeskEquipment] = useState<DeskFeature[]>([]);
 
   const [isLoading, setIsLoading] = useState({
     cities: true,
     buildings: false,
     floors: false,
     desks: false,
+    equipment: false,
   });
 
   // Fetch cities
   useEffect(() => {
-    setIsLoading(prev => ({ ...prev, cities: true }));
     apiClient.get('/cities')
       .then(response => setCities(response.data))
       .catch(error => console.error("Failed to fetch cities", error))
@@ -35,10 +40,6 @@ export function FloorAvailabilityPage() {
 
   // Fetch buildings
   useEffect(() => {
-    // Reset child states
-    setBuildings([]);
-    setFloors([]);
-    setDesks([]);
     if (selectedCity) {
       setIsLoading(prev => ({ ...prev, buildings: true }));
       apiClient.get(`/buildings/?city_id=${selectedCity}`)
@@ -50,9 +51,6 @@ export function FloorAvailabilityPage() {
 
   // Fetch floors
   useEffect(() => {
-    // Reset child states
-    setFloors([]);
-    setDesks([]);
     if (selectedBuilding) {
       setIsLoading(prev => ({ ...prev, floors: true }));
       apiClient.get(`/floors/?building_id=${selectedBuilding}`)
@@ -64,8 +62,6 @@ export function FloorAvailabilityPage() {
 
   // Fetch desks
   useEffect(() => {
-    // Reset child state
-    setDesks([]);
     if (selectedFloor) {
       setIsLoading(prev => ({ ...prev, desks: true }));
       apiClient.get(`/desks/?floor_id=${selectedFloor}`)
@@ -74,6 +70,17 @@ export function FloorAvailabilityPage() {
         .finally(() => setIsLoading(prev => ({ ...prev, desks: false })));
     }
   }, [selectedFloor]);
+
+  // Fetch equipment
+  useEffect(() => {
+    if (expandedDeskId) {
+      setIsLoading(prev => ({ ...prev, equipment: true }));
+      apiClient.get(`/desks/${expandedDeskId}/equipment`)
+        .then(response => setDeskEquipment(response.data))
+        .catch(error => console.error("Failed to fetch equipment", error))
+        .finally(() => setIsLoading(prev => ({ ...prev, equipment: false })));
+    }
+  }, [expandedDeskId]);
 
   return (
     <main className="app-shell">
@@ -94,9 +101,16 @@ export function FloorAvailabilityPage() {
                 {cities.map((city) => (
                   <li key={city.id} className={`item-card ${selectedCity === city.id ? 'selected' : ''}`}
                     onClick={() => {
-                      setSelectedCity(city.id);
-                      setSelectedBuilding(null);
-                      setSelectedFloor(null);
+                      if (selectedCity !== city.id) {
+                        setSelectedCity(city.id);
+                        setSelectedBuilding(null);
+                        setSelectedFloor(null);
+                        setBuildings([]);
+                        setFloors([]);
+                        setDesks([]);
+                        setExpandedDeskId(null);
+                        setDeskEquipment([]);
+                      }
                     }}>
                     {city.name}
                   </li>
@@ -114,8 +128,14 @@ export function FloorAvailabilityPage() {
                   {buildings.map((building) => (
                     <li key={building.id} className={`item-card ${selectedBuilding === building.id ? 'selected' : ''}`}
                       onClick={() => {
-                        setSelectedBuilding(building.id);
-                        setSelectedFloor(null);
+                        if (selectedBuilding !== building.id) {
+                          setSelectedBuilding(building.id);
+                          setSelectedFloor(null);
+                          setFloors([]);
+                          setDesks([]);
+                          setExpandedDeskId(null);
+                          setDeskEquipment([]);
+                        }
                       }}>
                       {building.name}
                     </li>
@@ -133,7 +153,14 @@ export function FloorAvailabilityPage() {
                 <ul className="item-list">
                   {floors.map((floor) => (
                     <li key={floor.id} className={`item-card ${selectedFloor === floor.id ? 'selected' : ''}`}
-                      onClick={() => setSelectedFloor(floor.id)}>
+                      onClick={() => {
+                        if (selectedFloor !== floor.id) {
+                          setSelectedFloor(floor.id);
+                          setDesks([]);
+                          setExpandedDeskId(null);
+                          setDeskEquipment([]);
+                        }
+                      }}>
                       Piętro {floor.floor_number}
                     </li>
                   ))}
@@ -151,13 +178,39 @@ export function FloorAvailabilityPage() {
               <div className="results-grid">
                 {desks.length > 0 ? (
                   desks.map((desk) => (
-                    <article className="desk-card" key={desk.id}>
+                    <article className="desk-card" style={{ cursor: 'pointer' }} key={desk.id} onClick={() => {
+                      if (expandedDeskId !== desk.id) {
+                        setExpandedDeskId(desk.id);
+                        setDeskEquipment([]);
+                      } else {
+                        setExpandedDeskId(null);
+                        setDeskEquipment([]);
+                      }
+                    }}>
                       <div className="desk-card__header">
                         <p className="desk-label">{desk.name}</p>
                         <span className={`status-pill ${desk.is_active ? 'status-pill--available' : 'status-pill--occupied'}`}>
                           {desk.is_active ? 'Dostępne' : 'Zajęte'}
                         </span>
                       </div>
+                      {expandedDeskId === desk.id && (
+                        <div className="desk-card__details" style={{ marginTop: '1rem', borderTop: '1px solid #eee', paddingTop: '0.5rem' }}>
+                          <h4 style={{ marginBottom: '0.5rem', fontSize: '0.95rem' }}>Wyposażenie:</h4>
+                          {isLoading.equipment ? <p style={{ fontSize: '0.9rem', color: '#666' }}>Ładowanie...</p> : (
+                            deskEquipment.length > 0 ? (
+                              <ul style={{ listStyle: 'disc', paddingLeft: '1.5rem', fontSize: '0.9rem', color: '#444' }}>
+                                {deskEquipment.map((eq, idx) => (
+                                  <li key={idx}>
+                                    {eq.feature.name} {eq.value ? `(${eq.value})` : ''}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p style={{ fontSize: '0.9rem', color: '#666' }}>Brak przypisanego wyposażenia.</p>
+                            )
+                          )}
+                        </div>
+                      )}
                     </article>
                   ))
                 ) : (
