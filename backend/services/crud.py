@@ -1,14 +1,13 @@
 """Async SQLAlchemy CRUD helpers for the hot desk app."""
 
-from datetime import datetime, timezone
 from typing import Any, Optional, TypeVar
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import Building, Desk, Employee, Floor, Reservation
-from schemas import BuildingCreate, DeskCreate, FloorCreate, ReservationCreate
+from models import Building, Desk, DeskFeature, Floor, Reservation, User
+from schemas import BuildingCreate, DeskCreate, DeskFeaturePayload, DeskMapPayload, FloorCreate, ReservationCreate
 
 ModelType = TypeVar("ModelType")
 
@@ -21,18 +20,12 @@ class DeskNotFoundError(LookupError):
     pass
 
 
-class EmployeeNotFoundError(LookupError):
+class UserNotFoundError(LookupError):
     pass
 
 
 class DeskMaintenanceError(ValueError):
     pass
-
-
-def _normalize_datetime(value: datetime) -> datetime:
-    if value.tzinfo is not None:
-        return value.astimezone(timezone.utc).replace(tzinfo=None)
-    return value
 
 
 async def _create_record(
@@ -101,54 +94,135 @@ async def get_desks_by_floor(session: AsyncSession, floor_id: int) -> list[Desk]
     result = await session.execute(
         select(Desk)
         .where(Desk.floor_id == floor_id)
-        .order_by(Desk.label)
+        .order_by(Desk.name)
     )
     return list(result.scalars().all())
 
 
-async def get_reservations_for_employee(session: AsyncSession, employee_id: int) -> list[Reservation]:
+async def update_floor_map(
+    session: AsyncSession,
+    floor_id: int,
+    svg_map_url: str,
+) -> Optional[Floor]:
+    floor = await get_floor(session, floor_id)
+    if floor is None:
+        return None
+
+    floor.svg_map_url = svg_map_url
+    session.add(floor)
+    await session.commit()
+    await session.refresh(floor)
+    return floor
+
+
+async def _sync_desk_features(
+    session: AsyncSession,
+    desk_id: int,
+    features: list[DeskFeaturePayload],
+) -> None:
+    await session.execute(delete(DeskFeature).where(DeskFeature.desk_id == desk_id))
+    if not features:
+        return
+
+    feature_rows = [
+        DeskFeature(
+            desk_id=desk_id,
+            feature_id=feature.feature_id,
+            value=feature.value,
+        )
+        for feature in features
+    ]
+    session.add_all(feature_rows)
+
+
+async def upsert_desks_for_floor(
+    session: AsyncSession,
+    floor_id: int,
+    desks_in: list[DeskMapPayload],
+) -> list[Desk]:
+    existing_ids = set(
+        await session.scalars(select(Desk.id).where(Desk.floor_id == floor_id))
+    )
+    incoming_ids = {desk.id for desk in desks_in if desk.id is not None}
+    deleted_ids = existing_ids - incoming_ids
+
+    if deleted_ids:
+        await session.execute(delete(DeskFeature).where(DeskFeature.desk_id.in_(deleted_ids)))
+        await session.execute(delete(Reservation).where(Reservation.desk_id.in_(deleted_ids)))
+        await session.execute(delete(Desk).where(Desk.id.in_(deleted_ids)))
+
+    existing_desks: list[Desk] = []
+    if incoming_ids:
+        result = await session.execute(select(Desk).where(Desk.id.in_(incoming_ids)))
+        existing_desks = list(result.scalars().all())
+
+    existing_by_id = {desk.id: desk for desk in existing_desks}
+    upserted_desks: list[Desk] = []
+
+    for desk_in in desks_in:
+        if desk_in.id is not None and desk_in.id in existing_by_id:
+            desk = existing_by_id[desk_in.id]
+            desk.name = desk_in.name
+            desk.description = desk_in.description
+            desk.x_pos = desk_in.x_pos
+            desk.y_pos = desk_in.y_pos
+            desk.is_active = desk_in.is_active
+            await _sync_desk_features(session, desk.id, desk_in.features)
+            upserted_desks.append(desk)
+        else:
+            desk = Desk(
+                name=desk_in.name,
+                description=desk_in.description,
+                x_pos=desk_in.x_pos,
+                y_pos=desk_in.y_pos,
+                is_active=desk_in.is_active,
+                floor_id=floor_id,
+            )
+            session.add(desk)
+            await session.flush()
+            await _sync_desk_features(session, desk.id, desk_in.features)
+            upserted_desks.append(desk)
+
+    await session.commit()
+    for desk in upserted_desks:
+        await session.refresh(desk)
+    return upserted_desks
+
+
+async def get_reservations_for_user(session: AsyncSession, user_id: int) -> list[Reservation]:
     result = await session.execute(
         select(Reservation)
-        .where(Reservation.employee_id == employee_id)
-        .order_by(Reservation.start_time.desc(), Reservation.id.desc())
+        .where(Reservation.user_id == user_id)
+        .order_by(Reservation.reservation_date.desc(), Reservation.id.desc())
     )
     return list(result.scalars().all())
 
 
 async def create_reservation(session: AsyncSession, reservation_in: ReservationCreate) -> Reservation:
-    start_time = _normalize_datetime(reservation_in.start_time)
-    end_time = _normalize_datetime(reservation_in.end_time)
-
-    if end_time <= start_time:
-        raise ValueError("End time must be after start time")
-
     desk = await get_desk(session, reservation_in.desk_id)
     if desk is None:
         raise DeskNotFoundError(f"Desk {reservation_in.desk_id} not found")
 
-    if desk.status == "maintenance":
-        raise DeskMaintenanceError("Desk is under maintenance")
+    if not desk.is_active:
+        raise DeskMaintenanceError("Desk is inactive")
 
-    employee = await _get_record_by_id(session, Employee, reservation_in.employee_id)
-    if employee is None:
-        raise EmployeeNotFoundError(f"Employee {reservation_in.employee_id} not found")
+    user = await _get_record_by_id(session, User, reservation_in.user_id)
+    if user is None:
+        raise UserNotFoundError(f"User {reservation_in.user_id} not found")
 
     conflict_query = select(Reservation.id).where(
         Reservation.desk_id == reservation_in.desk_id,
-        Reservation.status == "active",
-        Reservation.start_time < end_time,
-        Reservation.end_time > start_time,
+        Reservation.reservation_date == reservation_in.reservation_date,
+        Reservation.status == "confirmed",
     )
     conflict_id = await session.scalar(conflict_query)
     if conflict_id is not None:
-        raise ReservationConflictError("Desk already has an active reservation in the selected time range")
+        raise ReservationConflictError("Desk already has a confirmed reservation for this date")
 
     reservation = Reservation(
         desk_id=reservation_in.desk_id,
-        employee_id=reservation_in.employee_id,
-        start_time=start_time,
-        end_time=end_time,
-        status=reservation_in.status,
+        user_id=reservation_in.user_id,
+        reservation_date=reservation_in.reservation_date,
     )
     session.add(reservation)
 

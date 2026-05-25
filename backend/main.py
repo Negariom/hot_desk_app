@@ -1,9 +1,18 @@
 import os
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from database import create_database_schema
-from routers import cities, buildings, floors, desks
+from routers import buildings, cities, desks, features, floors, reservations
+from services import auth
+
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+MAPS_DIR = STATIC_DIR / "maps"
+MAPS_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="Hot Desk API")
 
@@ -34,10 +43,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
 app.include_router(cities.router)
 app.include_router(buildings.router)
 app.include_router(floors.router)
 app.include_router(desks.router)
+app.include_router(features.router)
+app.include_router(reservations.router)
+app.include_router(auth.router)
 
 if __name__ == "__main__":
     import uvicorn

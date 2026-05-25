@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from models import Employee
+from models import User
 
 
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
@@ -53,27 +53,27 @@ def create_access_token(data: dict[str, Any], expires_delta: Optional[timedelta]
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-async def get_employee_by_email(session: AsyncSession, email: str) -> Optional[Employee]:
+async def get_user_by_email(session: AsyncSession, email: str) -> Optional[User]:
     normalized_email = normalize_email(email)
     result = await session.execute(
-        select(Employee).where(func.lower(Employee.email) == normalized_email)
+        select(User).where(func.lower(User.email) == normalized_email)
     )
     return result.scalar_one_or_none()
 
 
-async def authenticate_employee(
+async def authenticate_user(
     session: AsyncSession,
     email: str,
     password: str,
-) -> Employee | None:
-    employee = await get_employee_by_email(session, email)
-    if employee is None:
+) -> User | None:
+    user = await get_user_by_email(session, email)
+    if user is None:
         return None
-    if not employee.hash_password:
+    if not user.password_hash:
         return None
-    if not verify_password(password, employee.hash_password):
+    if not verify_password(password, user.password_hash):
         return None
-    return employee
+    return user
 
 
 @router.post("/login", response_model=Token)
@@ -81,8 +81,8 @@ async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ) -> Token:
-    employee = await authenticate_employee(db, form_data.username, form_data.password)
-    if employee is None:
+    user = await authenticate_user(db, form_data.username, form_data.password)
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 
             detail="Incorrect email or password",
@@ -91,8 +91,8 @@ async def login_for_access_token(
 
     access_token = create_access_token(
         {
-            "sub": normalize_email(employee.email),
-            "employee_id": employee.id,
+            "sub": normalize_email(user.email),
+            "user_id": user.id,
         }
     )
     return Token(access_token=access_token)
@@ -101,7 +101,7 @@ async def login_for_access_token(
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
-) -> Employee:
+) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -116,8 +116,17 @@ async def get_current_user(
     except JWTError as exc:
         raise credentials_exception from exc
 
-    employee = await get_employee_by_email(db, email)
-    if employee is None:
+    user = await get_user_by_email(db, email)
+    if user is None:
         raise credentials_exception
 
-    return employee
+    return user
+
+
+async def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return current_user

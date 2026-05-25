@@ -77,8 +77,10 @@ python database.py
 Jesli chcesz zasilic baze danymi testowymi, uruchom dodatkowo:
 
 ```powershell
-python fakedatagenerator.py
+python datageneration.py
 ```
+
+Skrypt `fakedatagenerator.py` pozostaje jako alias dla kompatybilnosci.
 
 ## 4. Uruchom backend
 Najprostszy sposob to uruchomienie uvicorn z katalogu backend:
@@ -122,7 +124,7 @@ VITE_API_URL=http://localhost:8000
 ```powershell
 cd backend
 python database.py
-python fakedatagenerator.py
+python datageneration.py
 uvicorn main:app --reload
 ```
 

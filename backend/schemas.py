@@ -94,6 +94,25 @@ class DeskWithFeatures(Desk):
     features: List[DeskFeature] = []
 
 
+class DeskFeaturePayload(BaseModel):
+    feature_id: int
+    value: Optional[str] = None
+
+
+class DeskMapPayload(BaseModel):
+    id: Optional[int] = None
+    name: str
+    description: Optional[str] = None
+    x_pos: float
+    y_pos: float
+    is_active: bool = True
+    features: List[DeskFeaturePayload] = []
+
+
+class DeskBatchPayload(BaseModel):
+    desks: List[DeskMapPayload] = []
+
+
 # User Schemas
 class UserBase(BaseModel):
     email: str
@@ -120,7 +139,7 @@ class ReservationBase(BaseModel):
 
 
 class ReservationCreate(ReservationBase):
-    pass
+    user_id: int
 
 
 class Reservation(ReservationBase):

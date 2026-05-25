@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.crud import (
 	DeskMaintenanceError,
 	DeskNotFoundError,
-	EmployeeNotFoundError,
+	UserNotFoundError,
 	ReservationConflictError,
 	create_reservation as create_reservation_record,
 )
@@ -25,7 +25,7 @@ async def create_reservation(reservation: ReservationCreate, db: AsyncSession = 
 	except DeskNotFoundError as exc:
 		await db.rollback()
 		raise HTTPException(status_code=404, detail=str(exc))
-	except EmployeeNotFoundError as exc:
+	except UserNotFoundError as exc:
 		await db.rollback()
 		raise HTTPException(status_code=404, detail=str(exc))
 	except DeskMaintenanceError as exc:
