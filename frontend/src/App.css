@@ -178,6 +178,45 @@ body {
   margin-bottom: 0.5rem;
 }
 
+.reservation-expand {
+  margin-top: 0.5rem;
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.25rem 0;
+  transition: color 0.2s;
+}
+
+.reservation-expand:hover {
+  color: #1d4ed8;
+}
+
+.reservation-details {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.reservation-details__section h5 {
+  margin: 0 0 0.35rem 0;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.desk-meta__label {
+  font-weight: 600;
+  color: #334155;
+}
+
 .reservation-delete {
   margin-top: 0.75rem;
   border: 1px solid rgba(248, 113, 113, 0.5);
@@ -192,6 +231,29 @@ body {
 
 .reservation-delete:disabled {
   opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.desk-card__reserve {
+  margin-top: 0.75rem;
+  border: none;
+  background: #1d4ed8;
+  color: #fff;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  width: 100%;
+}
+
+.desk-card__reserve:hover {
+  background: #1e40af;
+}
+
+.desk-card__reserve:disabled {
+  background: #94a3b8;
   cursor: not-allowed;
 }
 
@@ -217,6 +279,11 @@ body {
 .status-pill--maintenance {
   background-color: #fff3cd;
   color: #856404;
+}
+
+.status-pill--reserved {
+  background-color: #fef3c7;
+  color: #92400e;
 }
 
 .state-card--empty {
@@ -264,6 +331,10 @@ body {
 
 .map-marker--inactive {
   background: #94a3b8;
+}
+
+.map-marker--reserved {
+  background: #f59e0b;
 }
 
 .map-marker--selected {
@@ -417,4 +488,46 @@ body {
 .notice--error {
   background: rgba(248, 113, 113, 0.14);
   color: #b91c1c;
+}
+
+.field--full-width {
+  grid-column: 1 / -1;
+}
+
+.features-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.feature-checkbox-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: #334155;
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease-in-out;
+}
+
+.feature-checkbox-tag:hover {
+  background: rgba(148, 163, 184, 0.15);
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.feature-checkbox-tag.active {
+  background: rgba(37, 99, 235, 0.1);
+  border-color: rgba(37, 99, 235, 0.4);
+  color: #1d4ed8;
+  font-weight: 500;
+}
+
+.feature-checkbox-tag input[type="checkbox"] {
+  display: none;
 }
