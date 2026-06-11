@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   API_BASE_URL,
   type Building,
@@ -42,6 +42,23 @@ export function FloorAvailabilityPage() {
   const [reservationDate, setReservationDate] = useState(today)
   const [listReservingId, setListReservingId] = useState<number | null>(null)
   const [listReservationMsg, setListReservationMsg] = useState<{ deskId: number; type: "success" | "error"; text: string } | null>(null)
+  const [isFeaturesDropdownOpen, setIsFeaturesDropdownOpen] = useState(false)
+  const featuresDropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        featuresDropdownRef.current &&
+        !featuresDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsFeaturesDropdownOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [])
 
   const [isLoading, setIsLoading] = useState({
     cities: true,
@@ -228,6 +245,19 @@ export function FloorAvailabilityPage() {
     }
   }
 
+  const getFeaturesTriggerText = () => {
+    if (selectedFeatures.length === 0) {
+      return "Wszystkie"
+    }
+    const selectedNames = features
+      .filter((f) => selectedFeatures.includes(f.id))
+      .map((f) => f.name)
+    if (selectedNames.length <= 2) {
+      return selectedNames.join(", ")
+    }
+    return `Wybrano: ${selectedNames.length}`
+  }
+
   return (
     <main className="app-shell">
       <section className="page">
@@ -315,31 +345,46 @@ export function FloorAvailabilityPage() {
               </select>
             </div>
 
-            <div className="field field--full-width">
-              <label>Wyposażenie (wymagane)</label>
-              <div className="features-checkbox-group">
-                {features.map((feature) => {
-                  const isChecked = selectedFeatures.includes(feature.id)
-                  return (
-                    <label
-                      key={feature.id}
-                      className={`feature-checkbox-tag ${isChecked ? "active" : ""}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => {
-                          setSelectedFeatures((prev) =>
-                            prev.includes(feature.id)
-                              ? prev.filter((id) => id !== feature.id)
-                              : [...prev, feature.id],
-                          )
-                        }}
-                      />
-                      <span>{feature.name}</span>
-                    </label>
-                  )
-                })}
+            <div className="field" ref={featuresDropdownRef}>
+              <label>Wyposażenie</label>
+              <div className={`multiselect-dropdown ${isFeaturesDropdownOpen ? "open" : ""}`}>
+                <button
+                  type="button"
+                  className="multiselect-dropdown__trigger"
+                  onClick={() => setIsFeaturesDropdownOpen((prev) => !prev)}
+                  disabled={isLoading.features}
+                >
+                  {isLoading.features ? "Ładowanie..." : getFeaturesTriggerText()}
+                </button>
+                {isFeaturesDropdownOpen && !isLoading.features && (
+                  <div className="multiselect-dropdown__menu">
+                    {features.length > 0 ? (
+                      features.map((feature) => {
+                        const isChecked = selectedFeatures.includes(feature.id)
+                        return (
+                          <label key={feature.id} className="multiselect-dropdown__item">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                setSelectedFeatures((prev) =>
+                                  prev.includes(feature.id)
+                                    ? prev.filter((id) => id !== feature.id)
+                                    : [...prev, feature.id],
+                                )
+                              }}
+                            />
+                            <span>{feature.name}</span>
+                          </label>
+                        )
+                      })
+                    ) : (
+                      <span className="desk-muted" style={{ padding: "0.5rem" }}>
+                        Brak wyposażenia.
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
