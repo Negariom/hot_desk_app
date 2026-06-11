@@ -28,7 +28,7 @@ export function FloorAvailabilityPage() {
   const [selectedCity, setSelectedCity] = useState<number | null>(null)
   const [selectedBuilding, setSelectedBuilding] = useState<number | null>(null)
   const [selectedFloor, setSelectedFloor] = useState<number | null>(null)
-  const [selectedFeature, setSelectedFeature] = useState<number | null>(null)
+  const [selectedFeatures, setSelectedFeatures] = useState<number[]>([])
   const [viewMode, setViewMode] = useState<ViewMode>("list")
   const [selectedDeskId, setSelectedDeskId] = useState<number | null>(null)
   const [selectedDesk, setSelectedDesk] = useState<DeskDetails | null>(null)
@@ -40,6 +40,8 @@ export function FloorAvailabilityPage() {
   const today = useMemo(() => new Date().toISOString().split("T")[0], [])
   const [selectedDate, setSelectedDate] = useState(today)
   const [reservationDate, setReservationDate] = useState(today)
+  const [listReservingId, setListReservingId] = useState<number | null>(null)
+  const [listReservationMsg, setListReservationMsg] = useState<{ deskId: number; type: "success" | "error"; text: string } | null>(null)
 
   const [isLoading, setIsLoading] = useState({
     cities: true,
@@ -64,8 +66,13 @@ export function FloorAvailabilityPage() {
     return `${API_BASE_URL}${selectedFloorData.svg_map_url}`
   }, [selectedFloorData])
 
+  const selectedDeskReserved = useMemo(
+    () => desks.find((d) => d.id === selectedDeskId)?.is_reserved ?? false,
+    [desks, selectedDeskId],
+  )
+
   const reservationDisabled =
-    !selectedDesk || !reservationDate || reservationState === "saving" || !selectedDesk.is_active
+    !selectedDesk || !reservationDate || reservationState === "saving" || !selectedDesk.is_active || selectedDeskReserved
 
   // Fetch cities
   useEffect(() => {
@@ -91,7 +98,7 @@ export function FloorAvailabilityPage() {
     setDesks([])
     setSelectedBuilding(null)
     setSelectedFloor(null)
-    setSelectedFeature(null)
+    setSelectedFeatures([])
     if (selectedCity) {
       setIsLoading((prev) => ({ ...prev, buildings: true }))
       getBuildings(selectedCity)
@@ -106,7 +113,7 @@ export function FloorAvailabilityPage() {
     setFloors([])
     setDesks([])
     setSelectedFloor(null)
-    setSelectedFeature(null)
+    setSelectedFeatures([])
     if (selectedBuilding) {
       setIsLoading((prev) => ({ ...prev, floors: true }))
       getFloors(selectedBuilding)
@@ -121,12 +128,12 @@ export function FloorAvailabilityPage() {
     setDesks([])
     if (selectedFloor && selectedDate) {
       setIsLoading((prev) => ({ ...prev, desks: true }))
-      getDesks(selectedFloor, selectedFeature)
+      getDesks(selectedFloor, selectedFeatures, selectedDate)
         .then(setDesks)
         .catch((error) => console.error("Failed to fetch desks", error))
         .finally(() => setIsLoading((prev) => ({ ...prev, desks: false })))
     }
-  }, [selectedFloor, selectedFeature, selectedDate])
+  }, [selectedFloor, selectedFeatures, selectedDate])
 
   useEffect(() => {
     setSelectedDeskId(null)
@@ -135,7 +142,8 @@ export function FloorAvailabilityPage() {
     setDeskError(null)
     setReservationState("idle")
     setReservationError(null)
-  }, [selectedFloor, selectedFeature, viewMode, selectedDate])
+    setListReservationMsg(null)
+  }, [selectedFloor, selectedFeatures, viewMode, selectedDate])
 
   useEffect(() => {
     setReservationDate(selectedDate)
@@ -177,6 +185,14 @@ export function FloorAvailabilityPage() {
     return names.slice(0, 3).join(", ") + (names.length > 3 ? "..." : "")
   }
 
+  const refreshDesks = () => {
+    if (selectedFloor && selectedDate) {
+      getDesks(selectedFloor, selectedFeatures, selectedDate)
+        .then(setDesks)
+        .catch((err) => console.error("Failed to refresh desks", err))
+    }
+  }
+
   const handleReservation = async () => {
     if (!selectedDesk || !reservationDate) {
       return
@@ -188,10 +204,27 @@ export function FloorAvailabilityPage() {
       await createReservation(selectedDesk.id, reservationDate)
       setReservationState("success")
       setDeskNotice(`Zarezerwowano biurko: ${selectedDesk.name}`)
+      refreshDesks()
     } catch (error) {
       console.error("Reservation failed", error)
       setReservationState("error")
       setReservationError("Nie udało się utworzyć rezerwacji.")
+    }
+  }
+
+  const handleListReservation = async (desk: Desk) => {
+    if (!selectedDate || !desk.is_active) return
+    setListReservingId(desk.id)
+    setListReservationMsg(null)
+    try {
+      await createReservation(desk.id, selectedDate)
+      setListReservationMsg({ deskId: desk.id, type: "success", text: `Zarezerwowano ${desk.name} na ${selectedDate}` })
+      refreshDesks()
+    } catch (error) {
+      console.error("Reservation failed", error)
+      setListReservationMsg({ deskId: desk.id, type: "error", text: "Nie udało się utworzyć rezerwacji." })
+    } finally {
+      setListReservingId(null)
     }
   }
 
@@ -282,22 +315,32 @@ export function FloorAvailabilityPage() {
               </select>
             </div>
 
-            <div className="field">
-              <label>Wyposażenie</label>
-              <select
-                value={selectedFeature ?? ""}
-                onChange={(event) =>
-                  setSelectedFeature(event.target.value ? Number(event.target.value) : null)
-                }
-                disabled={isLoading.features}
-              >
-                <option value="">Wszystkie</option>
-                {features.map((feature) => (
-                  <option key={feature.id} value={feature.id}>
-                    {feature.name}
-                  </option>
-                ))}
-              </select>
+            <div className="field field--full-width">
+              <label>Wyposażenie (wymagane)</label>
+              <div className="features-checkbox-group">
+                {features.map((feature) => {
+                  const isChecked = selectedFeatures.includes(feature.id)
+                  return (
+                    <label
+                      key={feature.id}
+                      className={`feature-checkbox-tag ${isChecked ? "active" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          setSelectedFeatures((prev) =>
+                            prev.includes(feature.id)
+                              ? prev.filter((id) => id !== feature.id)
+                              : [...prev, feature.id],
+                          )
+                        }}
+                      />
+                      <span>{feature.name}</span>
+                    </label>
+                  )
+                })}
+              </div>
             </div>
           </div>
         </section>
@@ -318,15 +361,30 @@ export function FloorAvailabilityPage() {
                       <div className="desk-card__header">
                         <p className="desk-label">{desk.name}</p>
                         <span
-                          className={`status-pill ${desk.is_active ? "status-pill--available" : "status-pill--occupied"}`}
+                          className={`status-pill ${!desk.is_active ? "status-pill--occupied" : desk.is_reserved ? "status-pill--reserved" : "status-pill--available"}`}
                         >
-                          {desk.is_active ? "Dostępne" : "Niedostępne"}
+                          {!desk.is_active ? "Niedostępne" : desk.is_reserved ? "Zarezerwowane" : "Dostępne"}
                         </span>
                       </div>
                       <p className="desk-meta">
                         {desk.description ? desk.description : "Brak opisu biurka."}
                       </p>
                       <p className="desk-meta">Wyposażenie: {formatEquipment(desk)}</p>
+                      {desk.is_active && !desk.is_reserved && (
+                        <button
+                          type="button"
+                          className="desk-card__reserve"
+                          onClick={() => handleListReservation(desk)}
+                          disabled={listReservingId === desk.id}
+                        >
+                          {listReservingId === desk.id ? "Rezerwuję..." : `Zarezerwuj na ${selectedDate}`}
+                        </button>
+                      )}
+                      {listReservationMsg?.deskId === desk.id && (
+                        <div className={`notice ${listReservationMsg.type === "success" ? "notice--success" : "notice--error"}`}>
+                          {listReservationMsg.text}
+                        </div>
+                      )}
                     </article>
                   ))
                 ) : (
@@ -357,7 +415,7 @@ export function FloorAvailabilityPage() {
                           <button
                             key={desk.id}
                             type="button"
-                            className={`map-marker ${desk.is_active ? "map-marker--active" : "map-marker--inactive"} ${
+                            className={`map-marker ${!desk.is_active ? "map-marker--inactive" : desk.is_reserved ? "map-marker--reserved" : "map-marker--active"} ${
                               selectedDeskId === desk.id ? "map-marker--selected" : ""
                             }`}
                             style={{ left: `${desk.x_pos}%`, top: `${desk.y_pos}%` }}
@@ -381,9 +439,9 @@ export function FloorAvailabilityPage() {
                   <h4>Wybrane biurko</h4>
                   {selectedDesk && (
                     <span
-                      className={`status-pill ${selectedDesk.is_active ? "status-pill--available" : "status-pill--occupied"}`}
+                      className={`status-pill ${!selectedDesk.is_active ? "status-pill--occupied" : selectedDeskReserved ? "status-pill--reserved" : "status-pill--available"}`}
                     >
-                      {selectedDesk.is_active ? "Dostępne" : "Niedostępne"}
+                      {!selectedDesk.is_active ? "Niedostępne" : selectedDeskReserved ? "Zarezerwowane" : "Dostępne"}
                     </span>
                   )}
                 </div>
@@ -447,6 +505,9 @@ export function FloorAvailabilityPage() {
                       </div>
                       {!selectedDesk.is_active && (
                         <p className="desk-muted">To biurko jest niedostępne do rezerwacji.</p>
+                      )}
+                      {selectedDesk.is_active && selectedDeskReserved && (
+                        <p className="desk-muted">To biurko jest już zarezerwowane na wybraną datę.</p>
                       )}
                     </div>
                   </div>
