@@ -45,6 +45,7 @@ export interface Desk {
   x_pos: number | null
   y_pos: number | null
   is_active: boolean
+  is_reserved?: boolean
   features?: DeskFeature[]
 }
 
@@ -70,6 +71,25 @@ export interface Reservation {
   status: string
   check_in: boolean
   created_at: string
+}
+
+export interface DeskFeatureInfo {
+  name: string
+  category?: string | null
+  value?: string | null
+}
+
+export interface DeskFullInfo {
+  id: number
+  name: string
+  description?: string | null
+  is_active: boolean
+  features: DeskFeatureInfo[]
+  floor_number: number
+  floor_description?: string | null
+  building_name: string
+  building_address: string
+  city_name: string
 }
 
 export interface DeskMapPayload {
@@ -150,10 +170,15 @@ export async function getFloors(buildingId: number): Promise<Floor[]> {
   return response.data
 }
 
-export async function getDesks(floorId: number, featureId?: number | null): Promise<Desk[]> {
+export async function getDesks(floorId: number, featureIds?: number[], reservationDate?: string | null): Promise<Desk[]> {
   const params = new URLSearchParams({ floor_id: String(floorId) })
-  if (featureId) {
-    params.append("feature_id", String(featureId))
+  if (featureIds && featureIds.length > 0) {
+    for (const id of featureIds) {
+      params.append("feature_id", String(id))
+    }
+  }
+  if (reservationDate) {
+    params.append("reservation_date", reservationDate)
   }
   const response = await apiClient.get<Desk[]>(`/desks/?${params.toString()}`)
   return response.data
@@ -161,6 +186,11 @@ export async function getDesks(floorId: number, featureId?: number | null): Prom
 
 export async function getDeskDetails(deskId: number): Promise<DeskDetails> {
   const response = await apiClient.get<DeskDetails>(`/desks/${deskId}`)
+  return response.data
+}
+
+export async function getDeskFullDetails(deskId: number): Promise<DeskFullInfo> {
+  const response = await apiClient.get<DeskFullInfo>(`/desks/${deskId}/full`)
   return response.data
 }
 

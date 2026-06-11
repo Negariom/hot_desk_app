@@ -94,6 +94,10 @@ class DeskWithFeatures(Desk):
     features: List[DeskFeature] = []
 
 
+class DeskWithAvailability(DeskWithFeatures):
+    is_reserved: bool = False
+
+
 class DeskFeaturePayload(BaseModel):
     feature_id: int
     value: Optional[str] = None
@@ -149,3 +153,22 @@ class Reservation(ReservationBase):
     check_in: bool
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+
+class DeskFeatureInfo(BaseModel):
+    name: str
+    category: Optional[str] = None
+    value: Optional[str] = None
+
+
+class DeskFullDetails(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    is_active: bool
+    features: List[DeskFeatureInfo] = []
+    floor_number: int
+    floor_description: Optional[str] = None
+    building_name: str
+    building_address: str
+    city_name: str
